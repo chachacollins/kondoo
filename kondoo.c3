@@ -2,6 +2,104 @@ import std::io;
 import std::collections::list;
 import std::collections::map;
 
+enum TokKind
+{
+    EOF,
+    LPAREN,
+    RPAREN,
+    BSLASH,
+    ARROW,
+    ILLEGAL,
+    IDENT,
+}
+
+struct Token
+{
+    TokKind kind;
+    String lexeme;
+}
+
+struct Lexer
+{
+    String source;
+    int pos;
+    int r_pos;
+}
+
+fn void Lexer.skip_whitespace(&self)
+{
+    while(true)
+    {
+        char c = self.peek();
+        switch (c)
+        {
+            case ' ': nextcase;
+            case '\n': nextcase;
+            case '\t': nextcase;
+            case '\r': self.advance();
+            default: return;
+        }
+    }
+}
+
+fn bool Lexer.is_at_end(&self)
+{
+    return (self.r_pos >= self.source.len);
+}
+
+fn char Lexer.peek(&self)
+{
+    if(self.is_at_end()) return '\0';
+    return self.source[self.r_pos];
+}
+
+fn char Lexer.advance(&self)
+{
+    if (self.is_at_end()) return '\0';
+    self.pos = self.r_pos;
+    self.r_pos++;
+    return self.source[self.pos];
+}
+
+fn Token Lexer.make_token(&self, TokKind kind)
+{
+    return (Token){ kind, string::format(mem, "%c",self.source[self.pos])};
+}
+
+fn bool Lexer.match(&self, char c)
+{
+    if (self.source[self.r_pos] == c)
+    {
+        self.advance();
+        return true;
+    }
+    else { return false; }
+}
+
+fn Token Lexer.to_ident(&self)
+{
+    DString d = dstring::new(mem);
+    while(ascii::is_alnum(self.peek())) d.append_char(self.advance());
+    return (Token) {IDENT, d.str_view()};
+}
+
+fn Token Lexer.next_token(&self)
+{
+    self.skip_whitespace();
+    if (self.is_at_end()) return self.make_token(TokKind.EOF);
+    if (ascii::is_alpha(self.peek())) return self.to_ident();
+    char c = self.advance();
+    switch(c)
+    {
+        case '(': return self.make_token(TokKind.LPAREN);
+        case ')': return self.make_token(TokKind.RPAREN);
+        case '\\': return self.make_token(TokKind.BSLASH);
+        case '-': if(self.match('>')) { return self.make_token(TokKind.ARROW);  }
+                  else                { return self.make_token(TokKind.ILLEGAL);}
+        default: return self.make_token(TokKind.ILLEGAL);
+    }
+}
+
 enum ExprKind
 {
     VAR,
@@ -191,14 +289,13 @@ fn Expr* eval(Expr* expr)
 fn void main()
 {
     var_map.init(mem);
-    Expr* x = create_variable_expr("x");
-    Expr* f = create_fun_expr(x, create_fun_expr(create_variable_expr("z"), create_variable_expr("x")));
-    Expr* a = create_app_expr(f, create_variable_expr("y"));
-    io::printn(expr_to_dstring(a));
-    Expr* z = eval(a);
-    io::printn(expr_to_dstring(z));
-    a = create_app_expr(z, create_variable_expr("a"));
-    io::printn(expr_to_dstring(a));
-    Expr* t =  eval(a);
-    io::printn(expr_to_dstring(t));
+    io::print("> ");
+    String line = io::readline(mem)!!;
+    Lexer lexer = {line, 0, 0};
+    Token tok = lexer.next_token();
+    while (tok.kind != TokKind.EOF)
+    {
+        io::printn(tok);
+        tok = lexer.next_token();
+    }
 }
