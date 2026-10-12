@@ -1,6 +1,6 @@
-//TODO: make this capture free
 import std::io;
 import std::collections::list;
+import std::collections::map;
 
 enum ExprKind
 {
@@ -124,6 +124,46 @@ fn Expr* substitute(Expr* target, Expr* with)
     return target.as.fun.body;
 }
 
+uint counter = 0;
+
+fn String getsym(String s)
+{
+    return string::format(mem, "%s%d", s, counter++);
+}
+
+HashMap{String, String} var_map;
+
+fn void alpha_conversion(Expr* expr)
+{
+    switch(expr.kind)
+    {
+        case VAR:
+        {
+            if (var_map.has_key(expr.as.variable))
+            {
+                expr.as.variable = var_map.get(expr.as.variable)!!;
+            }
+            else
+            {
+                String ns = getsym(expr.as.variable);
+                var_map.set(expr.as.variable, ns);
+                expr.as.variable = ns;
+            }
+            return;
+        }
+        case FUN:
+        {
+            alpha_conversion(expr.as.fun.head);
+            alpha_conversion(expr.as.fun.body);
+        }
+        case APP:
+        {
+            alpha_conversion(expr.as.app.lhs);
+            alpha_conversion(expr.as.app.rhs);
+        }
+    }
+}
+
 fn Expr* beta_reduce(Expr* expr)
 {
     switch(expr.kind)
@@ -142,16 +182,23 @@ fn Expr* beta_reduce(Expr* expr)
     }
 }
 
+fn Expr* eval(Expr* expr)
+{
+    alpha_conversion(expr);
+    return beta_reduce(expr);
+}
+
 fn void main()
 {
+    var_map.init(mem);
     Expr* x = create_variable_expr("x");
     Expr* f = create_fun_expr(x, create_fun_expr(create_variable_expr("z"), create_variable_expr("x")));
     Expr* a = create_app_expr(f, create_variable_expr("y"));
     io::printn(expr_to_dstring(a));
-    Expr* z = beta_reduce(a);
+    Expr* z = eval(a);
     io::printn(expr_to_dstring(z));
     a = create_app_expr(z, create_variable_expr("a"));
     io::printn(expr_to_dstring(a));
-    Expr* t =  beta_reduce(a);
+    Expr* t =  eval(a);
     io::printn(expr_to_dstring(t));
 }
