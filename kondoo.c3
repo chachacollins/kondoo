@@ -2,6 +2,31 @@ import std::io;
 import std::collections::list;
 import std::collections::map;
 
+enum OptKind
+{
+    OPT_NONE,
+    OPT_SOME,
+}
+
+struct Option<Type>
+{
+    Type val;
+    OptKind kind;
+}
+
+excuse ACCESSING_OPT_NONE;
+
+fn Type? Option.get_val(&self)
+{
+    if (self.kind == OPT_NONE) return ACCESSING_OPT_NONE~;
+    return self.val;
+}
+
+fn bool Option.is_none(&self)
+{
+    return self.kind == OPT_NONE;
+}
+
 enum TokKind
 {
     EOF,
@@ -196,6 +221,90 @@ fn DString expr_to_dstring(Expr* expr)
     return d;
 }
 
+struct Parser
+{
+    Lexer *lexer;
+    Option{Token} peeked_token;
+}
+
+fn Token Parser.peek_token(&self)
+{
+    if (self.peeked_token.is_none())
+    {
+        self.peeked_token = { .val = self.lexer.next_token(), .kind = OPT_SOME};
+    }
+    return self.peeked_token.get_val()!!;
+}
+
+fn Token Parser.advance(&self)
+{
+    if (try tok = self.peeked_token.get_val())
+    {
+        self.peeked_token.kind = OPT_NONE;
+        return tok;
+    }
+    return self.lexer.next_token();
+}
+
+fn Expr* Parser.parse_variable(&self)
+{
+    Token tok = self.advance();
+    return create_variable_expr(tok.lexeme);
+}
+
+fn Expr* Parser.parse_fun(&self)
+{
+    self.advance();
+    Token tok = self.peek_token();
+    if (tok.kind != TokKind.IDENT)
+    {
+        io::printn("ERROR: expected identifier after slash");
+        return null;
+    }
+    Token name = self.advance();
+    tok = self.peek_token();
+    if (tok.kind != TokKind.ARROW)
+    {
+        io::printn("ERROR: functions only accept one arguement. Expected `->`.");
+        return null;
+    }
+    self.advance();
+    Expr* body = self.parse();
+    return create_fun_expr(create_variable_expr(name.lexeme), body);
+}
+
+fn Expr* Parser.parse_app(&self)
+{
+    self.advance();
+    Expr* lhs = self.parse();
+    Token tok = self.peek_token();
+    if (tok.kind != TokKind.RPAREN)
+    {
+        io::printn("ERROR: expected closing paren on the lhs of the expr");
+        return null;
+    }
+    self.advance();
+    Expr* rhs = self.parse();
+    if (rhs == null)
+    {
+        io::printn("ERROR: expected a rhs to the lhs of the expr");
+        return null;
+    }
+    return create_app_expr(lhs, rhs);
+}
+
+fn Expr* Parser.parse(&self)
+{
+    Token tok = self.peek_token();
+    switch(tok.kind)
+    {
+        case TokKind.IDENT: return self.parse_variable();
+        case TokKind.BSLASH: return self.parse_fun();
+        case TokKind.LPAREN: return self.parse_app();
+        default: return null;
+    }
+}
+
 fn void substitute_impl(Expr* body, Expr* head, Expr* with)
 {
     switch(body.kind)
@@ -289,13 +398,14 @@ fn Expr* eval(Expr* expr)
 fn void main()
 {
     var_map.init(mem);
-    io::print("> ");
-    String line = io::readline(mem)!!;
-    Lexer lexer = {line, 0, 0};
-    Token tok = lexer.next_token();
-    while (tok.kind != TokKind.EOF)
+    while (true)
     {
-        io::printn(tok);
-        tok = lexer.next_token();
+        io::print("> ");
+        String line = io::readline(mem)!!;
+        Lexer lexer = {line, 0, 0};
+        Parser parser = {.lexer = &lexer};
+        Expr* expr = parser.parse();
+        if (expr != null) io::printn(expr_to_dstring(eval(expr)));
+        var_map.clear();
     }
 }
