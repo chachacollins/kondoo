@@ -376,12 +376,12 @@ fn Expr* beta_reduce(Expr* expr)
     switch(expr.kind)
     {
         case VAR: nextcase;
-        case FUN:
-            return expr;
+        case FUN: return expr;
         case APP:
         {
             expr.as.app.lhs = beta_reduce(expr.as.app.lhs);
             if (expr.as.app.lhs.kind != FUN) return expr;
+            alpha_conversion(expr.as.app.lhs);
             expr.as.app.rhs = beta_reduce(expr.as.app.rhs);
             Expr* temp = substitute(expr.as.app.lhs, expr.as.app.rhs);
             return beta_reduce(temp);
@@ -391,7 +391,6 @@ fn Expr* beta_reduce(Expr* expr)
 
 fn Expr* eval(Expr* expr)
 {
-    alpha_conversion(expr);
     return beta_reduce(expr);
 }
 
